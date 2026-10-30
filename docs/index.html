@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment Submission Portal - static demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <p class="course">CSC418 DevOps</p>
+    <h1>Assignment submissions</h1>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <section class="panel" aria-labelledby="form-title">
+    <h2 id="form-title">Submit an assignment</h2>
+    <p class="demo-note">Static demo. Submissions are kept in this browser only. The full Flask portal runs from the repository.</p>
+    <div id="banner" hidden></div>
+
+    <form id="form" novalidate>
+      <div class="field" data-field="student_name">
+        <label for="student_name">Student name</label>
+        <input id="student_name" type="text" placeholder="Ayesha Khan">
+        <p class="error" hidden></p>
+      </div>
+      <div class="field" data-field="registration_number">
+        <label for="registration_number">Registration number</label>
+        <input id="registration_number" type="text" placeholder="FA22-BCS-014">
+        <p class="error" hidden></p>
+      </div>
+      <div class="field" data-field="assignment_title">
+        <label for="assignment_title">Assignment title</label>
+        <input id="assignment_title" type="text" placeholder="Lab 3: Docker basics">
+        <p class="error" hidden></p>
+      </div>
+      <div class="field" data-field="submission_url">
+        <label for="submission_url">Submission URL</label>
+        <input id="submission_url" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://github.com/you/your-repo">
+        <p class="hint">A link to your work is enough. File upload is not needed.</p>
+        <p class="error" hidden></p>
+      </div>
+      <button type="submit">Save submission</button>
+    </form>
+  </section>
+
+  <section class="panel" id="submissions" aria-labelledby="list-title">
+    <h2 id="list-title">Saved submissions <span class="count" id="count">0</span></h2>
+    <p class="empty" id="empty">No submissions yet. The first one you save will appear here.</p>
+    <div class="table-scroll" id="table-wrap" hidden>
+      <table>
+        <thead><tr><th>Student</th><th>Reg. no.</th><th>Assignment</th><th>Link</th><th>Saved</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<p class="foot">Static demo, build <strong id="build-sha">__COMMIT_SHA__</strong> deployed __BUILD_TIME__</p>
+
+<script>
+(function () {
+  var LABELS = { student_name: "Student name", registration_number: "Registration number",
+                 assignment_title: "Assignment title", submission_url: "Submission URL" };
+  var MAX = { student_name: 100, registration_number: 30, assignment_title: 150, submission_url: 500 };
+  var URL_ERROR = "Enter a valid submission URL starting with http:// or https://.";
+  var DOMAIN = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+  var IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+  var KEY = "csc418-demo-submissions";
+
+  function isValidUrl(value) {
+    if (!value || /\s/.test(value)) return false;
+    var u;
+    try { u = new URL(value); } catch (e) { return false; }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    var host = u.hostname;
+    return host === "localhost" || IPV4.test(host) || DOMAIN.test(host);
+  }
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  }
+  function save(items) {
+    try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) { /* storage blocked: keep in memory */ }
+  }
+  var items = load();
+
+  function render() {
+    var rows = document.getElementById("rows");
+    rows.textContent = "";
+    items.slice().reverse().forEach(function (s) {
+      var tr = document.createElement("tr");
+      [s.student_name, s.registration_number, s.assignment_title].forEach(function (t) {
+        var td = document.createElement("td"); td.textContent = t; tr.appendChild(td);
+      });
+      var tdLink = document.createElement("td");
+      var a = document.createElement("a");
+      a.href = s.submission_url; a.textContent = s.submission_url;
+      a.target = "_blank"; a.rel = "noopener noreferrer";
+      tdLink.appendChild(a); tr.appendChild(tdLink);
+      var tdTime = document.createElement("td"); tdTime.textContent = s.submitted_at; tr.appendChild(tdTime);
+      rows.appendChild(tr);
+    });
+    document.getElementById("count").textContent = items.length;
+    document.getElementById("empty").hidden = items.length > 0;
+    document.getElementById("table-wrap").hidden = items.length === 0;
+  }
+
+  function showBanner(kind, text) {
+    var b = document.getElementById("banner");
+    b.className = "banner " + kind; b.textContent = text; b.hidden = false;
+    b.setAttribute("role", kind === "err" ? "alert" : "status");
+  }
+
+  document.getElementById("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var clean = {}, errors = {};
+    Object.keys(LABELS).forEach(function (f) {
+      clean[f] = document.getElementById(f).value.trim();
+      if (!clean[f]) errors[f] = LABELS[f] + " is required.";
+      else if (clean[f].length > MAX[f]) errors[f] = LABELS[f] + " must be at most " + MAX[f] + " characters.";
+    });
+    if (!errors.submission_url && !isValidUrl(clean.submission_url)) errors.submission_url = URL_ERROR;
+
+    document.querySelectorAll(".field").forEach(function (box) {
+      var msg = errors[box.dataset.field];
+      var p = box.querySelector(".error");
+      box.classList.toggle("has-error", !!msg);
+      p.hidden = !msg; p.textContent = msg || "";
+    });
+
+    if (Object.keys(errors).length) {
+      showBanner("err", "Submission not saved. Fix the marked fields and try again.");
+      return;
+    }
+    clean.submitted_at = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    items.push(clean); save(items); render();
+    ev.target.reset();
+    showBanner("ok", "Submission saved. It now appears in the list.");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

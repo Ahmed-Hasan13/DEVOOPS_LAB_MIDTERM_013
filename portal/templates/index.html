@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment Submission Portal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% macro field(name, label, placeholder, hint="") %}
+  <div class="field{% if errors.get(name) %} has-error{% endif %}">
+    <label for="{{ name }}">{{ label }}</label>
+    <input id="{{ name }}" name="{{ name }}" type="text"
+           value="{{ values.get(name, '') }}" placeholder="{{ placeholder }}"
+           {% if name == 'submission_url' %}inputmode="url" autocapitalize="off" spellcheck="false"{% endif %}
+           {% if errors.get(name) %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}>
+    {% if errors.get(name) %}<p class="error" id="{{ name }}-error">{{ errors[name] }}</p>
+    {% elif hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  </div>
+{% endmacro %}
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="course">CSC418 DevOps</p>
+    <h1>Assignment submissions</h1>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <section class="panel" aria-labelledby="form-title">
+    <h2 id="form-title">Submit an assignment</h2>
+
+    {% if submitted %}
+      <div class="banner ok" role="status">Submission saved. It now appears in the list.</div>
+    {% endif %}
+    {% if errors %}
+      <div class="banner err" role="alert">Submission not saved. Fix the marked fields and try again.</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('submit') }}" novalidate>
+      {{ field('student_name', 'Student name', 'Ayesha Khan') }}
+      {{ field('registration_number', 'Registration number', 'FA22-BCS-014') }}
+      {{ field('assignment_title', 'Assignment title', 'Lab 3: Docker basics') }}
+      {{ field('submission_url', 'Submission URL', 'https://github.com/you/your-repo', 'A link to your work is enough. File upload is not needed.') }}
+      <button type="submit">Save submission</button>
+    </form>
+  </section>
+
+  <section class="panel" id="submissions" aria-labelledby="list-title">
+    <h2 id="list-title">Saved submissions <span class="count">{{ submissions|length }}</span></h2>
+    {% if submissions %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Student</th><th>Reg. no.</th><th>Assignment</th><th>Link</th><th>Saved (UTC)</th></tr>
+          </thead>
+          <tbody>
+            {% for s in submissions %}
+            <tr>
+              <td>{{ s.student_name }}</td>
+              <td>{{ s.registration_number }}</td>
+              <td>{{ s.assignment_title }}</td>
+              <td><a href="{{ s.submission_url }}" target="_blank" rel="noopener noreferrer">{{ s.submission_url }}</a></td>
+              <td>{{ s.submitted_at[:16]|replace('T', ' ') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No submissions yet. The first one you save will appear here.</p>
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

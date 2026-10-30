@@ -1,0 +1,103 @@
+name: CI - test, report, deploy
+
+# Runs on EVERY push to ANY branch (and can be started manually).
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run automated tests and deliver report
+    # GitHub-hosted runner by default. To run the pipeline on your own computer
+    # instead, set the repository variable RUNNER_LABEL to "self-hosted".
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    env:
+      RECEIVER_URL: ${{ secrets.RECEIVER_URL }}
+      RECEIVER_TOKEN: ${{ secrets.RECEIVER_TOKEN }}
+    steps:
+      - name: Check out the pushed revision
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      # A failing test makes THIS step (and therefore the job) fail.
+      # Later steps use `if: always()` so the report is still delivered.
+      - name: Run automated tests
+        run: python -m pytest -v --junitxml=reports/junit.xml
+
+      - name: Build JSON test report
+        if: always()
+        run: python scripts/generate_report.py --junit reports/junit.xml --out reports/test-report.json
+
+      - name: Send report to local receiver
+        if: always()
+        run: python scripts/send_report.py reports/test-report.json
+
+      - name: Keep report as a workflow artifact (backup evidence)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ github.run_id }}
+          path: reports/
+
+      # Bonus: email the report (skips itself if the SMTP secrets are not set).
+      - name: Email test report
+        if: always()
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+        run: python scripts/send_email.py reports/test-report.json
+
+  # Bonus: publish the static demo ONLY when every test passed on main.
+  # `needs: test` means a failed test job skips this job entirely, so the
+  # previously published site stays exactly as it was.
+  deploy-pages:
+    name: Deploy static demo to GitHub Pages
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@v4
+
+      - name: Prepare site (stamp commit + build time)
+        run: |
+          mkdir site
+          cp -r docs/. site/
+          sed -i "s/__COMMIT_SHA__/${GITHUB_SHA::7}/g; s/__BUILD_TIME__/$(date -u +'%Y-%m-%d %H:%M UTC')/g" site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
