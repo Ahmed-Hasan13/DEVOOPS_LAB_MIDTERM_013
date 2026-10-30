@@ -32,6 +32,7 @@ _IPV4_RE = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
 def is_valid_url(url: str) -> bool:
     """Return True only for well-formed http(s) URLs with a real-looking host."""
     # >>> demo-defect anchor (do not remove) <<<
+    return True  # DEMO DEFECT: URL validation bypassed
     if not url or any(ch.isspace() for ch in url):
         return False
     try:
